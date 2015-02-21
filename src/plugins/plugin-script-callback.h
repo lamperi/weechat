@@ -23,7 +23,7 @@
 struct t_plugin_script_cb
 {
     void *script;                            /* pointer to script           */
-    char *function;                          /* script function called      */
+    void *function;                          /* script function called      */
     char *data;                              /* data string for callback    */
     struct t_config_file *config_file;       /* not NULL for config file    */
     struct t_config_section *config_section; /* not NULL for config section */
@@ -37,7 +37,7 @@ struct t_plugin_script_cb
 };
 
 extern struct t_plugin_script_cb *plugin_script_callback_add (struct t_plugin_script *script,
-                                                              const char *function,
+                                                              void *function,
                                                               const char *data);
 extern void plugin_script_callback_remove (struct t_plugin_script *script,
                                            struct t_plugin_script_cb *script_callback);

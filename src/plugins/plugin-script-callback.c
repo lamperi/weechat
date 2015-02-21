@@ -66,7 +66,7 @@ plugin_script_callback_alloc ()
 
 struct t_plugin_script_cb *
 plugin_script_callback_add (struct t_plugin_script *script,
-                            const char *function,
+                            void *function,
                             const char *data)
 {
     struct t_plugin_script_cb *script_cb;
@@ -79,7 +79,7 @@ plugin_script_callback_add (struct t_plugin_script *script,
 
     /* initialize callback */
     script_cb->script = script;
-    script_cb->function = (function) ? strdup (function) : NULL;
+    script_cb->function = function;
     script_cb->data = (data) ? strdup (data) : NULL;
 
     /* add callback to list */
@@ -99,8 +99,11 @@ plugin_script_callback_add (struct t_plugin_script *script,
 void
 plugin_script_callback_free_data (struct t_plugin_script_cb *script_callback)
 {
-    if (script_callback->function)
-        free (script_callback->function);
+	struct t_plugin_script *script = script_callback->script;
+    if (script_callback->function && script && script->function_free) {
+        script->function_free(script_callback->function);
+        script_callback->function = 0;
+	}
     if (script_callback->data)
         free (script_callback->data);
 }

@@ -307,7 +307,7 @@ weechat_python_dict_to_hashtable (PyObject *dict, int size,
 
 void *
 weechat_python_exec (struct t_plugin_script *script,
-                     int ret_type, const char *function,
+                     int ret_type, PyObject *function,
                      char *format, void **argv)
 {
     struct t_plugin_script *old_python_current_script;
@@ -326,9 +326,15 @@ weechat_python_exec (struct t_plugin_script *script,
         PyThreadState_Swap (script->interpreter);
     }
 
+
     evMain = PyImport_AddModule ((char *) "__main__");
     evDict = PyModule_GetDict (evMain);
-    evFunc = PyDict_GetItemString (evDict, function);
+
+	if (PyCallable_Check(function)) {
+        evFunc = function;
+	} else {
+        evFunc = PyDict_GetItem (evDict, function);
+	}
 
     if ( !(evFunc && PyCallable_Check (evFunc)) )
     {
@@ -805,10 +811,10 @@ weechat_python_unload (struct t_plugin_script *script)
                         PYTHON_PLUGIN_NAME, script->name);
     }
 
-    if (script->shutdown_func && script->shutdown_func[0])
+    if (script->shutdown_func)
     {
         rc = (int *) weechat_python_exec (script, WEECHAT_SCRIPT_EXEC_INT,
-                                          script->shutdown_func, NULL, NULL);
+                                          (PyObject *) script->shutdown_func, NULL, NULL);
         if (rc)
             free (rc);
     }

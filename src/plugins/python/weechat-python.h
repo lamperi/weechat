@@ -58,7 +58,7 @@ extern struct t_hashtable *weechat_python_dict_to_hashtable (PyObject *dict,
                                                              const char *type_keys,
                                                              const char *type_values);
 extern void *weechat_python_exec (struct t_plugin_script *script,
-                                  int ret_type, const char *function,
+                                  int ret_type, PyObject *function,
                                   char *format, void **argv);
 
 #endif /* WEECHAT_PYTHON_H */

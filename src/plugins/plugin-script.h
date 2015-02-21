@@ -59,12 +59,13 @@ struct t_plugin_script
     char *version;                       /* plugin version                  */
     char *license;                       /* script license                  */
     char *description;                   /* plugin description              */
-    char *shutdown_func;                 /* function when script is unloaded*/
+    void *shutdown_func;                 /* function when script is unloaded*/
     char *charset;                       /* script charset                  */
     struct t_plugin_script_cb *callbacks; /* callbacks for script           */
     int unloading;                       /* script is being unloaded        */
     struct t_plugin_script *prev_script; /* link to previous script         */
     struct t_plugin_script *next_script; /* link to next script             */
+    void (*function_free)(void *function_to_free);
 };
 
 struct t_plugin_script_init
@@ -118,7 +119,8 @@ extern struct t_plugin_script *plugin_script_add (struct t_weechat_plugin *weech
                                                   const char *filename, const char *name,
                                                   const char *author, const char *version,
                                                   const char *license, const char *description,
-                                                  const char *shutdown_func, const char *charset);
+                                                  void *shutdown_func, const char *charset,
+												  void (*function_free) (void *function_to_free));
 extern void plugin_script_set_buffer_callbacks (struct t_weechat_plugin *weechat_plugin,
                                                 struct t_plugin_script *scripts,
                                                 struct t_plugin_script *script,
