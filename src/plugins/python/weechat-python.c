@@ -336,23 +336,22 @@ weechat_python_exec (struct t_plugin_script *script,
         evMain = PyImport_AddModule ((char *) "__main__");
         evDict = PyModule_GetDict (evMain);
         evFunc = PyDict_GetItem (evDict, function);
+    }
 
-        if ( !(evFunc && !PyCallable_Check (evFunc)) )
+    if (!evFunc)
+    {
+        if (PyString_Check (function) && PyString_Size (function) != 0)
         {
             PyObject *object_repr = PyObject_Repr(function);
             const char *repr = PyString_AsString(object_repr);
             weechat_printf (NULL,
                             weechat_gettext ("%s%s: unable to run function %s"),
                             weechat_prefix ("error"), PYTHON_PLUGIN_NAME, repr);
-            /* PyEval_ReleaseThread (python_current_script->interpreter); */
-            if (old_interpreter)
-                PyThreadState_Swap (old_interpreter);
-            return NULL;
+            Py_XDECREF(object_repr);
         }
-    }
-
-    if (!evFunc)
-    {
+        /* PyEval_ReleaseThread (python_current_script->interpreter); */
+        if (old_interpreter)
+            PyThreadState_Swap (old_interpreter);
         return NULL;
     }
 
