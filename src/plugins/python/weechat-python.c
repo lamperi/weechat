@@ -315,6 +315,7 @@ weechat_python_exec (struct t_plugin_script *script,
     PyObject *evMain, *evDict, *evFunc, *rc;
     void *argv2[16], *ret_value;
     int i, argc, *ret_int;
+    evFunc = NULL;
 
     /* PyEval_AcquireLock (); */
 
@@ -329,22 +330,29 @@ weechat_python_exec (struct t_plugin_script *script,
 
     if (PyCallable_Check(function)) {
         evFunc = function;
-    } else if (PyString_Size(function) != 0) {
+    }
+    else if (PyString_Check (function) && PyString_Size (function) != 0)
+    {
         evMain = PyImport_AddModule ((char *) "__main__");
         evDict = PyModule_GetDict (evMain);
         evFunc = PyDict_GetItem (evDict, function);
+
+        if ( !(evFunc && !PyCallable_Check (evFunc)) )
+        {
+            PyObject *object_repr = PyObject_Repr(function);
+            const char *repr = PyString_AsString(object_repr);
+            weechat_printf (NULL,
+                            weechat_gettext ("%s%s: unable to run function %s"),
+                            weechat_prefix ("error"), PYTHON_PLUGIN_NAME, repr);
+            /* PyEval_ReleaseThread (python_current_script->interpreter); */
+            if (old_interpreter)
+                PyThreadState_Swap (old_interpreter);
+            return NULL;
+        }
     }
 
-    if ( !(evFunc && PyCallable_Check (evFunc)) )
+    if (!evFunc)
     {
-        PyObject *object_repr = PyObject_Repr(function);
-        const char *repr = PyString_AsString(object_repr);
-        weechat_printf (NULL,
-                        weechat_gettext ("%s%s: unable to run function %s"),
-                        weechat_prefix ("error"), PYTHON_PLUGIN_NAME, repr);
-        /* PyEval_ReleaseThread (python_current_script->interpreter); */
-        if (old_interpreter)
-            PyThreadState_Swap (old_interpreter);
         return NULL;
     }
 
