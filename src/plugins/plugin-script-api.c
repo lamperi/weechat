@@ -1266,22 +1266,30 @@ plugin_script_api_bar_item_new (struct t_weechat_plugin *weechat_plugin,
 {
     struct t_plugin_script_cb *script_cb;
     struct t_gui_bar_item *new_item;
+    char str_data[1024];
     int new_callback;
 
     new_callback = 0;
+
     if (strncmp (name, "(extra)", 7) == 0)
     {
         name += 7;
         new_callback = 1;
     }
 
-    script_cb = plugin_script_callback_add (script, function, data);
+    str_data[0] = '\0';
+    snprintf(str_data, sizeof(str_data),
+            "%s%s",
+            (new_callback) ? "(extra)" : "",
+            (data) ? data : "");
+
+    script_cb = plugin_script_callback_add (script, function, str_data);
     if (!script_cb)
         return NULL;
 
     new_item = weechat_bar_item_new (name,
-                                     (new_callback) ? build_callback : NULL,
-                                     (new_callback) ? script_cb : NULL);
+                                     build_callback,
+                                     script_cb);
     if (new_item)
         script_cb->bar_item = new_item;
     else

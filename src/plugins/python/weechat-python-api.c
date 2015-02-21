@@ -135,7 +135,7 @@ weechat_python_api_register (PyObject *self, PyObject *args)
                                                python_current_script_filename : "",
                                                name, author, version, license,
                                                description, shutdown_func, charset,
-											   &Py_DecRef);
+                                               (void (*)(void *)) &Py_DecRef);
     if (python_current_script)
     {
         python_registered_script = python_current_script;
@@ -4002,27 +4002,50 @@ weechat_python_api_bar_item_build_cb (void *data, struct t_gui_bar_item *item,
 
     if (script_callback && script_callback->function)
     {
-        /* new callback: data, item, window, buffer, extra_info */
-        func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
-        func_argv[1] = API_PTR2STR(item);
-        func_argv[2] = API_PTR2STR(window);
-        func_argv[3] = API_PTR2STR(buffer);
-        func_argv[4] = weechat_python_hashtable_to_dict (extra_info);
 
-        ret = (char *)weechat_python_exec (script_callback->script,
-                                           WEECHAT_SCRIPT_EXEC_STRING,
-                                           (PyObject*) script_callback->function,
-                                           "ssssO", func_argv);
-
-        if (func_argv[1])
-            free (func_argv[1]);
-        if (func_argv[2])
-            free (func_argv[2]);
-        if (func_argv[3])
-            free (func_argv[3]);
-        if (func_argv[4])
+        if (strncmp (script_callback->data, "(extra)", 7) == 0)
         {
-            Py_XDECREF((PyObject *)func_argv[4]);
+
+            /* new callback: data, item, window, buffer, extra_info */
+            func_argv[0] = (script_callback->data + 7) ? script_callback->data + 7 : empty_arg;
+            func_argv[1] = API_PTR2STR(item);
+            func_argv[2] = API_PTR2STR(window);
+    
+            func_argv[3] = API_PTR2STR(buffer);
+            func_argv[4] = weechat_python_hashtable_to_dict (extra_info);
+    
+            ret = (char *)weechat_python_exec (script_callback->script,
+                                               WEECHAT_SCRIPT_EXEC_STRING,
+                                               (PyObject*) script_callback->function,
+                                               "ssssO", func_argv);
+    
+            if (func_argv[1])
+                free (func_argv[1]);
+            if (func_argv[2])
+                free (func_argv[2]);
+            if (func_argv[3])
+                free (func_argv[3]);
+            if (func_argv[4])
+            {
+                Py_XDECREF((PyObject *)func_argv[4]);
+            }
+        } 
+        else
+        {
+            /* old callback: data, item, window */
+            func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
+            func_argv[1] = API_PTR2STR(item);
+            func_argv[2] = API_PTR2STR(window);
+
+            ret = (char *)weechat_python_exec (script_callback->script,
+                                               WEECHAT_SCRIPT_EXEC_STRING,
+                                               (PyObject*) script_callback->function,
+                                               "sss", func_argv);
+
+            if (func_argv[1])
+                free (func_argv[1]);
+            if (func_argv[2])
+                free (func_argv[2]);
         }
 
         return ret;
