@@ -1193,10 +1193,10 @@ plugin_script_api_buffer_new (struct t_weechat_plugin *weechat_plugin,
     }
 
     new_buffer = weechat_buffer_new (name,
-                                     (function_input && function_input) ? input_callback : NULL,
-                                     (function_input && function_input) ? script_cb_input : NULL,
-                                     (function_close && function_close) ? close_callback : NULL,
-                                     (function_close && function_close) ? script_cb_close : NULL);
+                                     function_input ? input_callback : NULL,
+                                     function_input ? script_cb_input : NULL,
+                                     function_close ? close_callback : NULL,
+                                     function_close ? script_cb_close : NULL);
     if (new_buffer)
     {
         script_cb_input->buffer = new_buffer;
