@@ -313,11 +313,14 @@ weechat_python_exec (struct t_plugin_script *script,
     struct t_plugin_script *old_python_current_script;
     PyThreadState *old_interpreter;
     PyObject *evMain, *evDict, *evFunc, *rc;
+    PyObject *object_repr, *repr_str;
     void *argv2[16], *ret_value;
     int i, argc, *ret_int;
     char *funName;
     evFunc = NULL;
     funName = NULL;
+    object_repr = NULL;
+    repr_str = NULL;
 
     /* PyEval_AcquireLock (); */
 
@@ -331,13 +334,29 @@ weechat_python_exec (struct t_plugin_script *script,
 
     if (PyCallable_Check (function)) {
         evFunc = function;
+
         PyObject *object_repr = PyObject_Repr (function);
-        funName = PyBytes_AsString (object_repr);
-        Py_XDECREF (object_repr);
+        if (PyUnicode_Check (object_repr))
+        {
+            repr_str = PyUnicode_AsUTF8String (object_repr);
+            funName = PyBytes_AsString (repr_str);
+        }
+        else if (PyBytes_Check (function))
+        {
+            funName = PyBytes_AsString (object_repr);
+        }
     }
-    else if (PyBytes_Check (function))
+    else
     {
-        funName = PyBytes_AsString (function);
+        if (PyUnicode_Check (function))
+        {
+            repr_str = PyUnicode_AsUTF8String (function);
+            funName = PyBytes_AsString (repr_str);
+        }
+        else if (PyBytes_Check (function))
+        {
+            funName = PyBytes_AsString (function);
+        }
         if (funName && funName[0])
         {
             evMain = PyImport_AddModule ((char *) "__main__");
@@ -357,6 +376,8 @@ weechat_python_exec (struct t_plugin_script *script,
         /* PyEval_ReleaseThread (python_current_script->interpreter); */
         if (old_interpreter)
             PyThreadState_Swap (old_interpreter);
+        Py_XDECREF (repr_str);
+        Py_XDECREF (object_repr);
         return NULL;
     }
 
@@ -448,6 +469,8 @@ weechat_python_exec (struct t_plugin_script *script,
 
     if (old_interpreter)
         PyThreadState_Swap (old_interpreter);
+    Py_XDECREF (repr_str);
+    Py_XDECREF (object_repr);
 
     return ret_value;
 }
