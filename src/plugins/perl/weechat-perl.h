@@ -42,7 +42,7 @@ extern struct t_hashtable *weechat_perl_hash_to_hashtable (SV *hash, int size,
                                                            const char *type_keys,
                                                            const char *type_values);
 extern void *weechat_perl_exec (struct t_plugin_script *script,
-                                int ret_type, const char *function,
+                                int ret_type, SV *function,
                                 const char *format, void **argv);
 
 #endif /* WEECHAT_PERL_H */

@@ -190,7 +190,7 @@ weechat_perl_hash_to_hashtable (SV *hash, int size, const char *type_keys,
 
 void *
 weechat_perl_exec (struct t_plugin_script *script,
-                   int ret_type, const char *function,
+                   int ret_type, SV *function,
                    const char *format, void **argv)
 {
     char *func;
@@ -204,6 +204,12 @@ weechat_perl_exec (struct t_plugin_script *script,
     void *old_context;
 #endif
 
+    func = SvPV_nolen (function);
+    if (!func || !func[0])
+    {
+        return NULL;
+    }
+
     old_perl_current_script = perl_current_script;
     perl_current_script = script;
 
@@ -214,14 +220,6 @@ weechat_perl_exec (struct t_plugin_script *script,
     if (script->interpreter)
         PERL_SET_CONTEXT (script->interpreter);
 #else
-    length = strlen ((script->interpreter) ? script->interpreter : perl_main) +
-        strlen (function) + 3;
-    func = (char *) malloc (length);
-    if (!func)
-        return NULL;
-    snprintf (func, length, "%s::%s",
-              (char *) ((script->interpreter) ? script->interpreter : perl_main),
-              function);
 #endif
 
     dSP;
@@ -250,7 +248,7 @@ weechat_perl_exec (struct t_plugin_script *script,
         }
     }
     PUTBACK;
-    count = call_pv (func, G_EVAL | G_SCALAR);
+    count = call_sv (function, G_EVAL | G_SCALAR);
 
     ret_value = NULL;
     mem_err = 1;
@@ -511,7 +509,7 @@ weechat_perl_unload (struct t_plugin_script *script)
     PERL_SET_CONTEXT (script->interpreter);
 #endif
 
-    if (script->shutdown_func && script->shutdown_func[0])
+    if (script->shutdown_func)
     {
         rc = (int *)weechat_perl_exec (script,
                                        WEECHAT_SCRIPT_EXEC_INT,

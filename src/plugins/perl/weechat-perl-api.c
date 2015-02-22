@@ -97,6 +97,13 @@
 
 extern void boot_DynaLoader (pTHX_ CV* cv);
 
+#define PERL_REF_INC(__x) SvREFCNT_inc (__x);
+#define PERL_REF_DEC(__x) SvREFCNT_dec (__x);
+
+void decrease_count(void *sv)
+{
+    PERL_REF_DEC (sv);
+}
 
 /*
  * Registers a perl script.
@@ -104,8 +111,8 @@ extern void boot_DynaLoader (pTHX_ CV* cv);
 
 XS (XS_weechat_api_register)
 {
-    char *name, *author, *version, *license, *description, *shutdown_func;
-    char *charset;
+    char *name, *author, *version, *license, *description, *charset;
+    SV *shutdown_func;
     dXSARGS;
 
     /* make C compiler happy */
@@ -133,7 +140,8 @@ XS (XS_weechat_api_register)
     version = SvPV_nolen (ST (2));
     license = SvPV_nolen (ST (3));
     description = SvPV_nolen (ST (4));
-    shutdown_func = SvPV_nolen (ST (5));
+    shutdown_func = ST (5);
+    PERL_REF_INC (shutdown_func);
     charset = SvPV_nolen (ST (6));
 
     if (plugin_script_search (weechat_perl_plugin, perl_scripts, name))
@@ -153,7 +161,8 @@ XS (XS_weechat_api_register)
                                              (perl_current_script_filename) ?
                                              perl_current_script_filename : "",
                                              name, author, version, license,
-                                             description, shutdown_func, charset);
+                                             description, shutdown_func, charset,
+                                             &decrease_count);
     if (perl_current_script)
     {
         perl_registered_script = perl_current_script;
@@ -734,7 +743,7 @@ weechat_perl_api_config_reload_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(config_file);
@@ -762,7 +771,8 @@ weechat_perl_api_config_reload_cb (void *data,
 
 XS (XS_weechat_api_config_new)
 {
-    char *result, *name, *function, *data;
+    char *result, *name, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "config_new", API_RETURN_EMPTY);
@@ -770,7 +780,8 @@ XS (XS_weechat_api_config_new)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     name = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_config_new (weechat_perl_plugin,
@@ -797,7 +808,7 @@ weechat_perl_api_config_section_read_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(config_file);
@@ -840,7 +851,7 @@ weechat_perl_api_config_section_write_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(config_file);
@@ -879,7 +890,7 @@ weechat_perl_api_config_section_write_default_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(config_file);
@@ -920,7 +931,7 @@ weechat_perl_api_config_section_create_option_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(config_file);
@@ -964,7 +975,7 @@ weechat_perl_api_config_section_delete_option_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(config_file);
@@ -998,10 +1009,10 @@ weechat_perl_api_config_section_delete_option_cb (void *data,
 
 XS (XS_weechat_api_config_new_section)
 {
-    char *result, *cfg_file, *name, *function_read, *data_read;
-    char *function_write, *data_write, *function_write_default;
-    char *data_write_default, *function_create_option, *data_create_option;
-    char *function_delete_option, *data_delete_option;
+    char *result, *cfg_file, *name, *data_read, *data_write;
+    char *data_write_default, *data_create_option, *data_delete_option;
+    SV *function_read, *function_write, *function_write_default;
+    SV *function_create_option, *function_delete_option;
 
     dXSARGS;
 
@@ -1011,15 +1022,20 @@ XS (XS_weechat_api_config_new_section)
 
     cfg_file = SvPV_nolen (ST (0));
     name = SvPV_nolen (ST (1));
-    function_read = SvPV_nolen (ST (4));
+    function_read = ST (4);
+    PERL_REF_INC (function_read);
     data_read = SvPV_nolen (ST (5));
-    function_write = SvPV_nolen (ST (6));
+    function_write = ST (6);
+    PERL_REF_INC (function_write);
     data_write = SvPV_nolen (ST (7));
-    function_write_default = SvPV_nolen (ST (8));
+    function_write_default = ST (8);
+    PERL_REF_INC (function_write_default);
     data_write_default = SvPV_nolen (ST (9));
-    function_create_option = SvPV_nolen (ST (10));
+    function_create_option = ST (10);
+    PERL_REF_INC (function_create_option);
     data_create_option = SvPV_nolen (ST (11));
-    function_delete_option = SvPV_nolen (ST (12));
+    function_delete_option = ST (12);
+    PERL_REF_INC (function_delete_option);
     data_delete_option = SvPV_nolen (ST (13));
 
     result = API_PTR2STR(plugin_script_api_config_new_section (weechat_perl_plugin,
@@ -1077,7 +1093,7 @@ weechat_perl_api_config_option_check_value_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(option);
@@ -1115,7 +1131,7 @@ weechat_perl_api_config_option_change_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(option);
@@ -1144,7 +1160,7 @@ weechat_perl_api_config_option_delete_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(option);
@@ -1166,8 +1182,8 @@ XS (XS_weechat_api_config_new_option)
 {
     char *result, *config_file, *section, *name, *type;
     char *description, *string_values, *default_value, *value;
-    char *function_check_value, *data_check_value, *function_change;
-    char *data_change, *function_delete, *data_delete;
+    char *data_check_value, *data_change, *data_delete;
+    SV *function_check_value, *function_change, *function_delete;
     dXSARGS;
 
     API_FUNC(1, "config_new_option", API_RETURN_EMPTY);
@@ -1182,11 +1198,14 @@ XS (XS_weechat_api_config_new_option)
     string_values = SvPV_nolen (ST (5));
     default_value = SvPV_nolen (ST (8));
     value = SvPV_nolen (ST (9));
-    function_check_value = SvPV_nolen (ST (11));
+    function_check_value = ST (11);
+    PERL_REF_INC (function_check_value);
     data_check_value = SvPV_nolen (ST (12));
-    function_change = SvPV_nolen (ST (13));
+    function_change = ST (13);
+    PERL_REF_INC (function_change);
     data_change = SvPV_nolen (ST (14));
-    function_delete = SvPV_nolen (ST (15));
+    function_delete = ST (15);
+    PERL_REF_INC (function_delete);
     data_delete = SvPV_nolen (ST (16));
 
     result = API_PTR2STR(plugin_script_api_config_new_option (weechat_perl_plugin,
@@ -1893,7 +1912,7 @@ weechat_perl_api_hook_command_cb (void *data, struct t_gui_buffer *buffer,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(buffer);
@@ -1923,7 +1942,8 @@ weechat_perl_api_hook_command_cb (void *data, struct t_gui_buffer *buffer,
 XS (XS_weechat_api_hook_command)
 {
     char *result, *command, *description, *args, *args_description;
-    char *completion, *function, *data;
+    char *completion, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_command", API_RETURN_EMPTY);
@@ -1935,7 +1955,8 @@ XS (XS_weechat_api_hook_command)
     args = SvPV_nolen (ST (2));
     args_description = SvPV_nolen (ST (3));
     completion = SvPV_nolen (ST (4));
-    function = SvPV_nolen (ST (5));
+    function = ST (5);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (6));
 
     result = API_PTR2STR(plugin_script_api_hook_command (weechat_perl_plugin,
@@ -1963,7 +1984,7 @@ weechat_perl_api_hook_command_run_cb (void *data, struct t_gui_buffer *buffer,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(buffer);
@@ -1992,7 +2013,8 @@ weechat_perl_api_hook_command_run_cb (void *data, struct t_gui_buffer *buffer,
 
 XS (XS_weechat_api_hook_command_run)
 {
-    char *result, *command, *function, *data;
+    char *result, *command, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_command_run", API_RETURN_EMPTY);
@@ -2000,7 +2022,8 @@ XS (XS_weechat_api_hook_command_run)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     command = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_hook_command_run (weechat_perl_plugin,
@@ -2023,7 +2046,7 @@ weechat_perl_api_hook_timer_cb (void *data, int remaining_calls)
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         snprintf (str_remaining_calls, sizeof (str_remaining_calls),
                   "%d", remaining_calls);
@@ -2081,7 +2104,7 @@ weechat_perl_api_hook_fd_cb (void *data, int fd)
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         snprintf (str_fd, sizeof (str_fd), "%d", fd);
 
@@ -2141,7 +2164,7 @@ weechat_perl_api_hook_process_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (command) ? (char *)command : empty_arg;
@@ -2170,7 +2193,8 @@ weechat_perl_api_hook_process_cb (void *data,
 
 XS (XS_weechat_api_hook_process)
 {
-    char *command, *function, *data, *result;
+    char *command, *data, *result;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_process", API_RETURN_EMPTY);
@@ -2178,7 +2202,8 @@ XS (XS_weechat_api_hook_process)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     command = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (2));
+    function = ST (2);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (3));
 
     result = API_PTR2STR(plugin_script_api_hook_process (weechat_perl_plugin,
@@ -2194,8 +2219,9 @@ XS (XS_weechat_api_hook_process)
 
 XS (XS_weechat_api_hook_process_hashtable)
 {
-    char *command, *function, *data, *result;
+    char *command, *data, *result;
     struct t_hashtable *options;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_process_hashtable", API_RETURN_EMPTY);
@@ -2207,7 +2233,8 @@ XS (XS_weechat_api_hook_process_hashtable)
                                               WEECHAT_SCRIPT_HASHTABLE_DEFAULT_SIZE,
                                               WEECHAT_HASHTABLE_STRING,
                                               WEECHAT_HASHTABLE_STRING);
-    function = SvPV_nolen (ST (3));
+    function = ST (3);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (4));
 
     result = API_PTR2STR(plugin_script_api_hook_process_hashtable (weechat_perl_plugin,
@@ -2238,7 +2265,7 @@ weechat_perl_api_hook_connect_cb (void *data, int status, int gnutls_rc,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         snprintf (str_status, sizeof (str_status), "%d", status);
         snprintf (str_gnutls_rc, sizeof (str_gnutls_rc), "%d", gnutls_rc);
@@ -2272,7 +2299,8 @@ weechat_perl_api_hook_connect_cb (void *data, int status, int gnutls_rc,
 
 XS (XS_weechat_api_hook_connect)
 {
-    char *proxy, *address, *local_hostname, *function, *data, *result;
+    char *proxy, *address, *local_hostname, *data, *result;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_connect", API_RETURN_EMPTY);
@@ -2282,7 +2310,8 @@ XS (XS_weechat_api_hook_connect)
     proxy = SvPV_nolen (ST (0));
     address = SvPV_nolen (ST (1));
     local_hostname = SvPV_nolen (ST (5));
-    function = SvPV_nolen (ST (6));
+    function = ST (6);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (7));
 
     result = API_PTR2STR(plugin_script_api_hook_connect (weechat_perl_plugin,
@@ -2322,7 +2351,7 @@ weechat_perl_api_hook_print_cb (void *data, struct t_gui_buffer *buffer,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         snprintf (timebuffer, sizeof (timebuffer), "%ld", (long int)date);
 
@@ -2362,7 +2391,8 @@ weechat_perl_api_hook_print_cb (void *data, struct t_gui_buffer *buffer,
 
 XS (XS_weechat_api_hook_print)
 {
-    char *result, *buffer, *tags, *message, *function, *data;
+    char *result, *buffer, *tags, *message, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_print", API_RETURN_EMPTY);
@@ -2372,7 +2402,8 @@ XS (XS_weechat_api_hook_print)
     buffer = SvPV_nolen (ST (0));
     tags = SvPV_nolen (ST (1));
     message = SvPV_nolen (ST (2));
-    function = SvPV_nolen (ST (4));
+    function = ST (4);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (5));
 
     result = API_PTR2STR(plugin_script_api_hook_print (weechat_perl_plugin,
@@ -2400,7 +2431,7 @@ weechat_perl_api_hook_signal_cb (void *data, const char *signal, const char *typ
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (signal) ? (char *)signal : empty_arg;
@@ -2450,7 +2481,8 @@ weechat_perl_api_hook_signal_cb (void *data, const char *signal, const char *typ
 
 XS (XS_weechat_api_hook_signal)
 {
-    char *result, *signal, *function, *data;
+    char *result, *signal, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_signal", API_RETURN_EMPTY);
@@ -2458,7 +2490,8 @@ XS (XS_weechat_api_hook_signal)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     signal = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_hook_signal (weechat_perl_plugin,
@@ -2520,7 +2553,7 @@ weechat_perl_api_hook_hsignal_cb (void *data, const char *signal,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (signal) ? (char *)signal : empty_arg;
@@ -2547,7 +2580,8 @@ weechat_perl_api_hook_hsignal_cb (void *data, const char *signal,
 
 XS (XS_weechat_api_hook_hsignal)
 {
-    char *result, *signal, *function, *data;
+    char *result, *signal, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_hsignal", API_RETURN_EMPTY);
@@ -2555,7 +2589,8 @@ XS (XS_weechat_api_hook_hsignal)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     signal = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_hook_hsignal (weechat_perl_plugin,
@@ -2603,7 +2638,7 @@ weechat_perl_api_hook_config_cb (void *data, const char *option, const char *val
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (option) ? (char *)option : empty_arg;
@@ -2630,7 +2665,8 @@ weechat_perl_api_hook_config_cb (void *data, const char *option, const char *val
 
 XS (XS_weechat_api_hook_config)
 {
-    char *result, *option, *function, *data;
+    char *result, *option, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_config", API_RETURN_EMPTY);
@@ -2638,7 +2674,8 @@ XS (XS_weechat_api_hook_config)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     option = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_hook_config (weechat_perl_plugin,
@@ -2663,7 +2700,7 @@ weechat_perl_api_hook_completion_cb (void *data, const char *completion_item,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (completion_item) ? (char *)completion_item : empty_arg;
@@ -2695,7 +2732,8 @@ weechat_perl_api_hook_completion_cb (void *data, const char *completion_item,
 
 XS (XS_weechat_api_hook_completion)
 {
-    char *result, *completion, *description, *function, *data;
+    char *result, *completion, *description, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_completion", API_RETURN_EMPTY);
@@ -2704,7 +2742,8 @@ XS (XS_weechat_api_hook_completion)
 
     completion = SvPV_nolen (ST (0));
     description = SvPV_nolen (ST (1));
-    function = SvPV_nolen (ST (2));
+    function = ST (2);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (3));
 
     result = API_PTR2STR(plugin_script_api_hook_completion (weechat_perl_plugin,
@@ -2749,7 +2788,7 @@ weechat_perl_api_hook_modifier_cb (void *data, const char *modifier,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (modifier) ? (char *)modifier : empty_arg;
@@ -2767,7 +2806,8 @@ weechat_perl_api_hook_modifier_cb (void *data, const char *modifier,
 
 XS (XS_weechat_api_hook_modifier)
 {
-    char *result, *modifier, *function, *data;
+    char *result, *modifier, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_modifier", API_RETURN_EMPTY);
@@ -2775,7 +2815,8 @@ XS (XS_weechat_api_hook_modifier)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     modifier = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_hook_modifier (weechat_perl_plugin,
@@ -2816,7 +2857,7 @@ weechat_perl_api_hook_info_cb (void *data, const char *info_name,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (info_name) ? (char *)info_name : empty_arg;
@@ -2833,7 +2874,8 @@ weechat_perl_api_hook_info_cb (void *data, const char *info_name,
 
 XS (XS_weechat_api_hook_info)
 {
-    char *result, *info_name, *description, *args_description, *function, *data;
+    char *result, *info_name, *description, *args_description, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_info", API_RETURN_EMPTY);
@@ -2843,7 +2885,8 @@ XS (XS_weechat_api_hook_info)
     info_name = SvPV_nolen (ST (0));
     description = SvPV_nolen (ST (1));
     args_description = SvPV_nolen (ST (2));
-    function = SvPV_nolen (ST (3));
+    function = ST (3);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (4));
 
     result = API_PTR2STR(plugin_script_api_hook_info (weechat_perl_plugin,
@@ -2868,7 +2911,7 @@ weechat_perl_api_hook_info_hashtable_cb (void *data, const char *info_name,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (info_name) ? (char *)info_name : empty_arg;
@@ -2886,7 +2929,8 @@ weechat_perl_api_hook_info_hashtable_cb (void *data, const char *info_name,
 XS (XS_weechat_api_hook_info_hashtable)
 {
     char *result, *info_name, *description, *args_description;
-    char *output_description, *function, *data;
+    char *output_description, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_info_hashtable", API_RETURN_EMPTY);
@@ -2897,7 +2941,8 @@ XS (XS_weechat_api_hook_info_hashtable)
     description = SvPV_nolen (ST (1));
     args_description = SvPV_nolen (ST (2));
     output_description = SvPV_nolen (ST (3));
-    function = SvPV_nolen (ST (4));
+    function = ST (4);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (5));
 
     result = API_PTR2STR(plugin_script_api_hook_info_hashtable (weechat_perl_plugin,
@@ -2924,7 +2969,7 @@ weechat_perl_api_hook_infolist_cb (void *data, const char *infolist_name,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = (infolist_name) ? (char *)infolist_name : empty_arg;
@@ -2948,7 +2993,8 @@ weechat_perl_api_hook_infolist_cb (void *data, const char *infolist_name,
 XS (XS_weechat_api_hook_infolist)
 {
     char *result, *infolist_name, *description, *pointer_description;
-    char *args_description, *function, *data;
+    char *args_description, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_infolist", API_RETURN_EMPTY);
@@ -2959,7 +3005,8 @@ XS (XS_weechat_api_hook_infolist)
     description = SvPV_nolen (ST (1));
     pointer_description = SvPV_nolen (ST (2));
     args_description = SvPV_nolen (ST (3));
-    function = SvPV_nolen (ST (4));
+    function = ST (4);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (5));
 
     result = API_PTR2STR(plugin_script_api_hook_infolist (weechat_perl_plugin,
@@ -2985,7 +3032,7 @@ weechat_perl_api_hook_focus_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = info;
@@ -3001,7 +3048,8 @@ weechat_perl_api_hook_focus_cb (void *data,
 
 XS (XS_weechat_api_hook_focus)
 {
-    char *result, *area, *function, *data;
+    char *result, *area, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "hook_focus", API_RETURN_EMPTY);
@@ -3009,7 +3057,8 @@ XS (XS_weechat_api_hook_focus)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     area = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_hook_focus (weechat_perl_plugin,
@@ -3081,7 +3130,7 @@ weechat_perl_api_buffer_input_data_cb (void *data, struct t_gui_buffer *buffer,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(buffer);
@@ -3117,7 +3166,7 @@ weechat_perl_api_buffer_close_cb (void *data, struct t_gui_buffer *buffer)
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
         func_argv[1] = API_PTR2STR(buffer);
@@ -3144,8 +3193,8 @@ weechat_perl_api_buffer_close_cb (void *data, struct t_gui_buffer *buffer)
 
 XS (XS_weechat_api_buffer_new)
 {
-    char *result, *name, *function_input, *data_input, *function_close;
-    char *data_close;
+    char *result, *name, *data_input, *data_close;
+    SV *function_input, *function_close;
     dXSARGS;
 
     API_FUNC(1, "buffer_new", API_RETURN_EMPTY);
@@ -3153,9 +3202,11 @@ XS (XS_weechat_api_buffer_new)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     name = SvPV_nolen (ST (0));
-    function_input = SvPV_nolen (ST (1));
+    function_input = ST (1);
+    PERL_REF_INC (function_input);
     data_input = SvPV_nolen (ST (2));
-    function_close = SvPV_nolen (ST (3));
+    function_close = ST (3);
+    PERL_REF_INC (function_close);
     data_close = SvPV_nolen (ST (4));
 
     result = API_PTR2STR(plugin_script_api_buffer_new (weechat_perl_plugin,
@@ -3814,12 +3865,12 @@ weechat_perl_api_bar_item_build_cb (void *data, struct t_gui_bar_item *item,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
-        if (strncmp (script_callback->function, "(extra)", 7) == 0)
+        if (strncmp (script_callback->data, "(extra)", 7) == 0)
         {
             /* new callback: data, item, window, buffer, extra_info */
-            func_argv[0] = (script_callback->data) ? script_callback->data : empty_arg;
+            func_argv[0] = (script_callback->data + 7) ? script_callback->data + 7 : empty_arg;
             func_argv[1] = API_PTR2STR(item);
             func_argv[2] = API_PTR2STR(window);
             func_argv[3] = API_PTR2STR(buffer);
@@ -3827,7 +3878,7 @@ weechat_perl_api_bar_item_build_cb (void *data, struct t_gui_bar_item *item,
 
             ret = (char *)weechat_perl_exec (script_callback->script,
                                              WEECHAT_SCRIPT_EXEC_STRING,
-                                             script_callback->function + 7,
+                                             script_callback->function,
                                              "ssssh", func_argv);
 
             if (func_argv[1])
@@ -3863,7 +3914,8 @@ weechat_perl_api_bar_item_build_cb (void *data, struct t_gui_bar_item *item,
 
 XS (XS_weechat_api_bar_item_new)
 {
-    char *result, *name, *function, *data;
+    char *result, *name, *data;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "bar_item_new", API_RETURN_EMPTY);
@@ -3871,7 +3923,8 @@ XS (XS_weechat_api_bar_item_new)
         API_WRONG_ARGS(API_RETURN_EMPTY);
 
     name = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     result = API_PTR2STR(plugin_script_api_bar_item_new (weechat_perl_plugin,
@@ -4802,7 +4855,7 @@ weechat_perl_api_upgrade_read_cb (void *data,
 
     script_callback = (struct t_plugin_script_cb *)data;
 
-    if (script_callback && script_callback->function && script_callback->function[0])
+    if (script_callback && script_callback->function)
     {
         snprintf (str_object_id, sizeof (str_object_id), "%d", object_id);
 
@@ -4836,8 +4889,9 @@ weechat_perl_api_upgrade_read_cb (void *data,
 
 XS (XS_weechat_api_upgrade_read)
 {
-    char *upgrade_file, *function, *data;
+    char *upgrade_file, *data;
     int rc;
+    SV *function;
     dXSARGS;
 
     API_FUNC(1, "upgrade_read", API_RETURN_INT(0));
@@ -4845,7 +4899,8 @@ XS (XS_weechat_api_upgrade_read)
         API_WRONG_ARGS(API_RETURN_INT(0));
 
     upgrade_file = SvPV_nolen (ST (0));
-    function = SvPV_nolen (ST (1));
+    function = ST (1);
+    PERL_REF_INC (function);
     data = SvPV_nolen (ST (2));
 
     rc = plugin_script_api_upgrade_read (weechat_perl_plugin,
